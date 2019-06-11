@@ -15,6 +15,7 @@ from pyspark.conf import SparkConf
 from link2postgresql.progressbar import ShowProcess
 import re
 import link2postgresql
+from urllib.request import quote
 class Link2postgresql(object):
 
     def __init__(self, user="postgres", password="postgres", ip="localhost", port="5432",database="postgres", *args, **kwargs):
@@ -47,14 +48,19 @@ class Link2postgresql(object):
     def buildspark(self,appname="sparkapp"):
         conf = SparkConf().setAppName(appname)
         conf = conf.setAll\
-        ([('spark.executor.memory', '4g'),\
+        ([('spark.executor.memory', '2g'),\
             ('spark.cores.max', '4'),\
             ('spark.executor.cores','4'),\
             ('spark.driver.memory','8g'),\
             ('spark.default.parallelism','4'),\
             ('spark.sql.warehouse.dir',r"%s/spark-warehouse"% os.path.dirname(link2postgresql.__file__)),\
             ('spark.driver.extraClassPath',r"%s/driver/postgresql-42.2.2.jar"% os.path.dirname(link2postgresql.__file__)),\
-            ('spark.driver.allowMultipleContexts', 'true')\
+            ('spark.driver.allowMultipleContexts', 'true'),\
+            ('spark.network.timeout', '10000000'),\
+            ('spark.core.connection.ack.wait.timeout', '10000000'),\
+            ('spark.storage.blockManagerSlaveTimeoutMs','10000000'), \
+            ('spark.shuffle.io.connectionTimeout','10000000'), \
+            ('spark.rpc.askTimeout or spark.rpc.lookupTimeout','10000000')
             ])      
         sc = SparkContext(conf=conf) 
         return sc
@@ -65,7 +71,7 @@ class Link2postgresql(object):
         '''
         self.startspark()
         #try:
-        url="jdbc:postgresql://%s:%s/%s?user=%s&password=%s"%(self.ip,self.port,self.database,self.user,self.password)
+        url="jdbc:postgresql://%s:%s/%s?user=%s&password=%s"%(quote(self.ip),quote(self.port),quote(self.database),quote(self.user),quote(self.password))
         if cmd=="":
             spark_df = self.sqlContext.read.format("jdbc").option("url", url).option("dbtable", table_name).load()
             return spark_df
@@ -95,7 +101,7 @@ class Link2postgresql(object):
         use for updating spark dataframe into ``postgresql``table in the servers.
         '''
         self.startspark()
-        url="jdbc:postgresql://%s:%s/%s?user=%s&password=%s"%(self.ip,self.port,self.database,self.user,self.password)
+        url="jdbc:postgresql://%s:%s/%s?user=%s&password=%s"%(quote(self.ip),quote(self.port),quote(self.database),quote(self.user),quote(self.password))
         df.write.jdbc(url,table=table_name,mode=mode)
 
 # base methods
