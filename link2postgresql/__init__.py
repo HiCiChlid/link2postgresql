@@ -35,9 +35,11 @@ class Link2postgresql(object):
         if SparkContext._active_spark_context:
             self.sc=SparkContext._active_spark_context
             self.sqlContext=SQLContext(self.sc)
+            self.sqlContext.sql("set spark.sql.execution.arrow.enabled=true")
         else:
             self.sc=self.buildspark()
             self.sqlContext = SQLContext(self.sc)
+            self.sqlContext.sql("set spark.sql.execution.arrow.enabled=true")
 
     def restartspark(self):
         self.sc.stop()
@@ -123,7 +125,7 @@ class Link2postgresql(object):
             # print('execute successfully!')
             pgisCon.close()
             
-    def fetch_execute(self,cmd):
+    def fetch_execute(self,cmd,title=False):
         try:
             pgisCon = psycopg2.connect(database=self.database, user=self.user, password=self.password, host=self.ip ,port=self.port)
             try:
@@ -141,7 +143,13 @@ class Link2postgresql(object):
         else:
             # print('execute successfully!')
             pgisCon.close()
-            return results
+            if title==True:
+                col_names = []
+                for elt in pgisCursor.description:
+                    col_names.append(elt[0])
+                return(results,col_names)
+            else:
+                return results
 
 # from database to local
     def tablemaxcount(self,id_name,table_name):
@@ -163,8 +171,8 @@ class Link2postgresql(object):
         else:
             print("error")
             return
-        results=self.fetch_execute(cmd)
-        return pd.DataFrame(results)
+        results=self.fetch_execute(cmd,title=True)
+        return pd.DataFrame(results[0],columns=results[1])
 
     def table2pandas_df_slow(self,table_name,cmd=""):
         spark_df=self.table2spark_df(table_name,cmd)

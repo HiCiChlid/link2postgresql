@@ -1,11 +1,11 @@
 # link2postgresql
 
 This is a collection of methods for uploading or downloading data with different formats.
-1. Using sql to manage DB
-1. Spark dataframe <-> DB
-1. Pandas dataframe <-> DB
+1. Using SQL to manage DB
+1. Spark DataFrame <-> DB
+1. Pandas DataFrame <-> DB
 1. Excel/csv/json -->DB
-* Automatically add an ID column when upload
+* Automatically add an ID column when uploading
 
 ## Getting Started
 
@@ -27,6 +27,7 @@ pip install pandas
 pip install numpy
 pip install findspark
 pip install pyspark
+pip install pyarrow
 ```
 
 ### Installing
@@ -87,16 +88,23 @@ aim_link.execute("delete from sample_table where id=1;")
 
 ### fetch_execute
 
-Download the data from DB
+Download the data (String) from DB 
 
 ```python
 cmd="select * from sample_table;"
 temp=aim_link.fetch_execute(cmd=cmd)
 ```
+Download the data and title (Tuple) from DB 
 
+```python
+cmd="select * from sample_table;"
+temp=aim_link.fetch_execute(cmd=cmd,title=True)
+data=temp[0]
+title=temp[1]
+```
 ### tablemaxcount
 
-Inner-class function. Getting the max value of id from the defined table and columns. 
+Inner-class function. Getting the max value of id from the defined table and columns.
 
 ```python
 def tablemaxcount(self,id_name,table_name):
@@ -112,14 +120,9 @@ cmd="select * from sample_table where id=1"
 pandas_df=aim_link.table2pandas_df(table_name='sample_table',cmd=cmd)
 ```
 
-However, it is without columns names. Users should rename the labels.
-```python
-pandas_df.column=['a','b','c']
-```
-
 ### table2pandas_df_slow
 
-Using `JDBC` to download to spark dataframe and then transform it into pandas dataframe. The pandas dataframe has labels.
+Using `JDBC` to download to spark dataframe and then transform it into pandas dataframe. `Pyarrow` is used to accelerate the action.
 
 ```python
 cmd="select * from sample_table where id=1"
@@ -212,6 +215,7 @@ aim_link.json2table(jsonpath='./sample_table.json',table_name='sample_table', if
 * **GUO Zijian**
 
 ## License
+```
 MIT License
 
 Copyright (c) 2018-present GUO ZIJIAN from PolyU
@@ -233,6 +237,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-
-
+```
