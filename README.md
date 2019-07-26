@@ -150,25 +150,8 @@ upload pandas dataframe to PostgreSQL database.
 2. `if_exists='append'`: Continuoulsy insert table without wawrnings.
 3. `id='True'`: create a ID column in the first. At the same time, a creasing sequence and a primary key constraint will be created.
 
-* Known error: if the current table is without the sequence and constraint, an error will appear. To fix it:
-```python
-tablename='sample_table'
-# create the constraint of primary key
-aim_link.execute("ALTER TABLE %s ADD CONSTRAINT %s_id_pk PRIMARY KEY (id);"%(table_name,table_name))
-# create sequence of creasing
-aim_link.execute('''
-CREATE SEQUENCE %s_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-alter table %s alter column id set default nextval('%s_id_seq');
-'''%(table_name,table_name,table_name))
-```
-
 2. `clean="True"`:Special marks in title may casue some errors with a high risk!! So I use 'clean' to fix it.
-3. `clean="True"`:single quota marks in the content will also cause error. So set check="True".
+3. `check="True"`:single quota marks in the content will also cause error. So set check="True".
 
 ```python
 aim_link.pandas_df2table(df=pandas_df, table_name='sample_table', if_exists='append', id='True', check="True", clean="True")

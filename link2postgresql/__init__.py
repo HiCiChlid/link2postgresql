@@ -291,19 +291,126 @@ class Link2postgresql(object):
         df=pd.read_json(jsonpath)
         self.pandas_df2table(df, table_name, if_exists,*args, **kwargs)
 # others
-    def _makeid(self,df,table_name,head='False'):
-        """
-        the first row is a copy of original the first row. for occupy the 0 index
-        """
+    def _makeid(self,df,table_name,head=False):
         df.reset_index(inplace=True, drop=True)
         df2=df.copy()
         df3=df.copy()
-        try:
-            maxcount=self.tablemaxcount('id',table_name) # if success, the table exists.
-            if maxcount is None:
-                maxcount=0
-        except:
-            #if fail, the table have not built.next step is to build it.
+        lengthcount=len(df3) 
+    
+        have_table=len([True for i in [i[0] for i in self.fetch_execute("select tablename from pg_tables;")] if table_name == i])
+        if have_table != 0: # table exists
+            column_list=[i[0] for i in self.fetch_execute("select column_name from information_schema.columns where table_schema='public' and table_name='%s';"%table_name)]
+            id_list=[i for i in column_list if 'id' == i or 'ID' == i or 'Id' == i]
+            have_id=len(id_list)
+
+            if have_id != 0: # ID column exists
+                id_column=id_list[0]
+
+                # id primary key
+                try:
+                    self.execute('alter table %s add constraint %s_id_pk primary key (%s);'%(table_name,table_name,id_column))
+                except:
+                    pass
+
+                #check seq existing or not
+                con_name=[j for j in [i[0] for i in self.fetch_execute("SELECT c.relname FROM pg_class c WHERE c.relkind = 'S';")] if table_name in j]
+                seq_id_list=[j for j in con_name if id_column in j]
+                have_seq=len(seq_id_list)  
+                
+                if have_seq != 0: 
+                    seq_id=seq_id_list[0]
+                    try:# if success, the id not null
+                        maxcount=self.tablemaxcount(id_column,table_name) 
+                        maxcount+=0
+                    except: #null
+                        self.execute("update %s set %s = nextval('%s');"%(table_name,id_column,seq_id))
+                        maxcount=self.tablemaxcount(id_column,table_name) 
+                    self.execute(
+'''alter sequence %s
+restart with %s
+increment by 1
+no minvalue
+no maxvalue
+cache 1;
+alter table %s alter column %s set default nextval ('%s');'''
+                        % (seq_id, maxcount+lengthcount+1, table_name,id_column, seq_id))
+                else: 
+                    seq_id="%s_id_seq"%table_name
+                    self.execute(
+'''create sequence %s
+start with 1
+increment by 1
+no minvalue
+no maxvalue
+cache 1;
+alter table %s alter column %s set default nextval ('%s');'''
+                %(seq_id,table_name,id_column,seq_id))             
+                    try:# if success, the id not null
+                        maxcount=self.tablemaxcount(id_column,table_name) 
+                        maxcount+=0
+                    except: #null
+                        self.execute("update %s set %s = nextval('%s');"%(table_name,id_column,seq_id))
+                        maxcount=self.tablemaxcount(id_column,table_name)
+                    self.execute(
+'''alter sequence %s
+restart with %s
+increment by 1
+no minvalue
+no maxvalue
+cache 1;
+alter table %s alter column %s set default nextval ('%s');'''
+                        % (seq_id, maxcount+lengthcount+1, table_name,id_column, seq_id))
+
+                id_pos=column_list.index(id_column)
+                id_ser = pd.Series(range(maxcount+1,maxcount+lengthcount+1),dtype='int')
+                df3.insert(id_pos,id_column,id_ser)
+
+            else: # no id
+                #check sequence,delete the existing seq before table building
+                con_name=[j for j in [i[0] for i in self.fetch_execute("SELECT c.relname FROM pg_class c WHERE c.relkind = 'S';")] if table_name in j]
+                extra_id_seq=[i for i in con_name if 'id' in i or 'ID' in i or 'Id' in i ]
+                for i in extra_id_seq:
+                    cmd="DROP SEQUENCE IF EXISTS %s"% i
+                    self.execute(cmd)
+
+                self.execute("alter table %s add column id int;"%table_name)
+                self.execute(
+'''create sequence %s_id_seq
+start with 1
+increment by 1
+no minvalue
+no maxvalue
+cache 1;
+alter table %s alter column id set default nextval ('%s_id_seq');'''
+                %(table_name,table_name,table_name))
+                self.execute("update %s set id = nextval('%s_id_seq');"%(table_name, table_name))  
+                self.execute('alter table %s add constraint %s_id_pk primary key (id);'%(table_name,table_name))
+                maxcount=self.tablemaxcount('id',table_name)
+                self.execute(
+'''alter sequence %s_id_seq
+restart with %s
+increment by 1
+no minvalue
+no maxvalue
+cache 1;
+alter table %s alter column id set default nextval ('%s_id_seq');'''
+                        % (table_name, maxcount+lengthcount+1, table_name, table_name))
+                id_ser = pd.Series(range(maxcount+1,maxcount+lengthcount+1),dtype='int')
+                df3['id']=id_ser
+
+        else: # don't have table
+            #check sequence,delete the existing seq before table building
+            con_name=[j for j in [i[0] for i in self.fetch_execute("SELECT c.relname FROM pg_class c WHERE c.relkind = 'S';")] if table_name in j]
+            for i in con_name:
+                cmd="DROP SEQUENCE IF EXISTS %s"% i
+                self.execute(cmd)
+
+            id_ser = pd.Series(range(1,lengthcount+1),dtype='int')
+            if _judgecorrect(head):
+                df3.insert(0,'id',id_ser)
+            else:
+                df3['id']=id_ser  
+                
             if _judgecorrect(head):
                 df2.insert(0,'id',0)
             else:
@@ -311,45 +418,16 @@ class Link2postgresql(object):
             self.pandas_df2table_lite(df2.head(1), table_name, if_exists='fail')
             self.execute('DELETE FROM %s where id=0'%table_name)
             self.execute('alter table %s add constraint %s_id_pk primary key (id);'%(table_name,table_name))
-            #self.execute('alter table %s add id serial primary key;'%table_name)
-            self.execute('''
-            create sequence %s_id_seq
-                start with 1
-                increment by 1
-                no minvalue
-                no maxvalue
-                cache 1;
-            alter table %s alter column id set default nextval ('%s_id_seq');      
-            '''%(table_name,table_name,table_name))
-            maxcount=0
-            
-        lengthcount=len(df3)
-        id_ser = pd.Series(range(maxcount+1,maxcount+lengthcount+1),dtype='int')
-        #df=pd.concat([df.head(1),df],sort=False)
-        if _judgecorrect(head):
-            df3.insert(0,'id',id_ser)
-        else:
-            df3['id']=id_ser
-        #print(len(df3),len(id_ser))
-        #auto increasing
-        #print(df3)
-        self.execute('''
-        alter sequence %s_id_seq
-            restart with %s
-            increment by 1
-            no minvalue
-            no maxvalue
-            cache 1;
-        alter table %s alter column id set default nextval ('%s_id_seq');      
-        ''' % (table_name, maxcount+lengthcount+1, table_name, table_name))
+            self.execute(
+'''create sequence %s_id_seq
+start with 1
+increment by 1
+no minvalue
+no maxvalue
+cache 1;
+alter table %s alter column id set default nextval ('%s_id_seq');''' 
+            % (table_name, table_name, table_name))
         return df3
-        #tempdf=pd.DataFrame(df,index=list(range(1)))
-        #result=result.reset_index()
-        #result=result.drop(['index'],axis=1)
-        #result=result.reset_index()
-        #result=result.rename(columns={'index':'id'})
-        #result=result.fillna(0)
-        #return result
     
 def _checksinglequote(df): #CHECK TEXT IN DATAFRAME. TEXT WITH SINGLE QUOTA CAN NOT BE INPUT INTO DB
     # print("start to clean single quotes")
