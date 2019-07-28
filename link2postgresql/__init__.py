@@ -186,12 +186,68 @@ class Link2postgresql(object):
     def insert_s(self,table_name, schema, values): # insert values into postgis, multilines
         self.execute("INSERT INTO %s (%s) VALUES %s;"%(table_name, schema, values))
 
-    def pandas_df2table(self, df, table_name, if_exists='append', id='True', check="True", clean="True"): # completely insert all data in pandas into table
+    def addgeocolumn(self,table_name,wkt_column="",geo_type="POINT"):
+        # create database geo-extension
+        try:
+            self.execute("create extension postgis;")
+        except:
+            pass
+
+        # check table existing or not
+        have_table=len([True for i in [i[0] for i in self.fetch_execute("select tablename from pg_tables;")] if table_name == i])
+        if have_table == 0:
+            print('no table')
+            return
+        else:
+            pass
+
+        # check geometry column
+        column_list=[i[0] for i in self.fetch_execute("select column_name from information_schema.columns where table_schema='public' and table_name='%s';"%table_name)]
+        have_geometry=len([i for i in column_list if 'geometry' == i])
+
+        column_list=[i[0] for i in self.fetch_execute("select column_name from information_schema.columns where table_schema='public' and table_name='%s';"%table_name)]
+        if wkt_column !="": #geometry column is wkt
+            # check wkt columns existing or not
+            if wkt_column in column_list:
+                try:
+                    if have_geometry == 0: 
+                        self.execute('alter table %s add column geometry geometry(%s,4326);'%(table_name,geo_type))
+                    else:
+                        pass
+                    self.execute("update %s set geometry=st_geomfromtext(%s, 4326);"%(table_name,wkt_column))
+                except:
+                    print('wkt is illegal')
+                    print('''
+                    Example:
+                    POINT (30 10)
+                    LINESTRING (30 10, 10 30, 40 40)
+                    POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10))
+                    POLYGON ((35 10, 45 45, 15 40, 10 20, 35 10),
+(20 30, 35 35, 30 20, 20 30))
+                    ''')
+                    self.execute('alter table %s drop column geometry;'%table_name)
+            else:
+                print('wrong wkt name')
+                return
+        else:
+            print('no wkt')
+            return
+
+        
+            
+    def pandas_df2table(self, df, table_name, if_exists='append', id='True', check='False', clean='True',wkt_column="",geo_type="POINT"): # completely insert all data in pandas into table
         '''
         1) table name should not contian ``uppercase letters``!!\
         2) ``special marks`` are in title may casue some errors with a high risk!! --> clean="True"\
         3)``single quota`` marks in the content will also --> check="True"
         '''
+        df=df.copy()
+        column_list=[i[0] for i in self.fetch_execute("select column_name from information_schema.columns where table_schema='public' and table_name='%s';"%table_name)]
+        have_geometry=len([i for i in column_list if 'geometry' == i])
+        if have_geometry != 0:
+            df['geometry']=np.nan
+        else:
+            pass
         # print("start to input data to [%s]-->[%s]"%(self.database,table_name))
         if _judgecorrect(id):
             df=self._makeid(df,table_name,head='True') #add title and id
@@ -218,9 +274,12 @@ class Link2postgresql(object):
                 copy_cmd = "COPY %s FROM STDIN HEADER DELIMITER '|' CSV" %table_name #goods_code.
                 cursor.copy_expert(copy_cmd, string_data_io)
             connection.connection.commit()
-        print("Finish inputing!")
+        if wkt_column != "": 
+            self.addgeocolumn(table_name=table_name,wkt_column=wkt_column,geo_type=geo_type)
+        else:
+            print("Finish inputing!")
 
-    def pandas_df2table_slow(self, df, table_name, geo_schema="", check="Yes"):
+    def pandas_df2table_slow(self, df, table_name, geo_schema="", check="Yes"): # no more maintenance
         if _judgecorrect(check):
             df=_checksinglequote(df)
         schema=""

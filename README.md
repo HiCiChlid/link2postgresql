@@ -144,6 +144,11 @@ schema="a,b,c"
 values="(1,1.0,'1.0'),(2,2.0,'2.0'),(3,3.0,'3.0')"
 aim_link.insert_s(table_name='sample_table', schema=schema, values=values)
 ```
+### addgeocolumn
+Manually transform a column about wkt[^1] into geometry.
+```python
+aim_link.addgeocolumn(table_name='sample_table',wkt_column='wkt_column',geo_type='POINT')
+```
 ### pandas_df2table
 upload pandas dataframe to PostgreSQL database.
 1. `table_name` should not contian `uppercase` letters!!
@@ -221,3 +226,5 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+[^1]: https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry
