@@ -362,7 +362,7 @@ class Link2postgresql(object):
             id_list=[i for i in column_list if 'id' == i or 'ID' == i or 'Id' == i]
             have_id=len(id_list)
 
-            if have_id != 0: # ID column exists
+            if have_id != 0: # table exists, ID column exists
                 id_column=id_list[0]
 
                 # id primary key
@@ -376,14 +376,18 @@ class Link2postgresql(object):
                 seq_id_list=[j for j in con_name if id_column in j]
                 have_seq=len(seq_id_list)  
                 
-                if have_seq != 0: 
+                if have_seq != 0: #table exists, ID column exists, id sequence exists
                     seq_id=seq_id_list[0]
                     try:# if success, the id not null
                         maxcount=self.tablemaxcount(id_column,table_name) 
                         maxcount+=0
                     except: #null
                         self.execute("update %s set %s = nextval('%s');"%(table_name,id_column,seq_id))
-                        maxcount=self.tablemaxcount(id_column,table_name) 
+                        try: 
+                            maxcount=self.tablemaxcount(id_column,table_name)
+                            maxcount+=0
+                        except: #without any conetext but a title
+                            maxcount=0
                     self.execute(
 '''alter sequence %s
 restart with %s
@@ -393,7 +397,7 @@ no maxvalue
 cache 1;
 alter table %s alter column %s set default nextval ('%s');'''
                         % (seq_id, maxcount+lengthcount+1, table_name,id_column, seq_id))
-                else: 
+                else: #table exists, ID column exists, ID column do not exist
                     seq_id="%s_id_seq"%table_name
                     self.execute(
 '''create sequence %s
@@ -404,12 +408,16 @@ no maxvalue
 cache 1;
 alter table %s alter column %s set default nextval ('%s');'''
                 %(seq_id,table_name,id_column,seq_id))             
-                    try:# if success, the id not null
+                    try:#  id is null or not
                         maxcount=self.tablemaxcount(id_column,table_name) 
                         maxcount+=0
-                    except: #null
+                    except: #id is null
                         self.execute("update %s set %s = nextval('%s');"%(table_name,id_column,seq_id))
-                        maxcount=self.tablemaxcount(id_column,table_name)
+                        try: #after updating, id is still null or not
+                            maxcount=self.tablemaxcount(id_column,table_name)
+                            maxcount+=0
+                        except: #id is still null, table without any conetext but a title
+                            maxcount=0
                     self.execute(
 '''alter sequence %s
 restart with %s
@@ -424,7 +432,7 @@ alter table %s alter column %s set default nextval ('%s');'''
                 id_ser = pd.Series(range(maxcount+1,maxcount+lengthcount+1),dtype='int')
                 df3.insert(id_pos,id_column,id_ser)
 
-            else: # no id
+            else: # table exists, ID column do not exist
                 #check sequence,delete the existing seq before table building
                 con_name=[j for j in [i[0] for i in self.fetch_execute("SELECT c.relname FROM pg_class c WHERE c.relkind = 'S';")] if table_name in j]
                 extra_id_seq=[i for i in con_name if 'id' in i or 'ID' in i or 'Id' in i ]
@@ -444,7 +452,11 @@ alter table %s alter column id set default nextval ('%s_id_seq');'''
                 %(table_name,table_name,table_name))
                 self.execute("update %s set id = nextval('%s_id_seq');"%(table_name, table_name))  
                 self.execute('alter table %s add constraint %s_id_pk primary key (id);'%(table_name,table_name))
-                maxcount=self.tablemaxcount('id',table_name)
+                try: #if table is single-title-no-data table
+                    maxcount=self.tablemaxcount('id',table_name)
+                    maxcount+=0
+                except:
+                    maxcount=0
                 self.execute(
 '''alter sequence %s_id_seq
 restart with %s
@@ -474,7 +486,7 @@ alter table %s alter column id set default nextval ('%s_id_seq');'''
                 df2.insert(0,'id',0)
             else:
                 df2['id']=0
-            self.pandas_df2table_lite(df2.head(1), table_name, if_exists='fail')
+            self.pandas_df2table(df=df2.head(1),table_name=table_name,if_exists='fail',id=False,check=False,clean=False)
             self.execute('DELETE FROM %s where id=0'%table_name)
             self.execute('alter table %s add constraint %s_id_pk primary key (id);'%(table_name,table_name))
             self.execute(
