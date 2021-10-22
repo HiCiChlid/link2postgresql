@@ -240,16 +240,10 @@ class Link2postgresql(object):
             print('no wkt')
             return
 
-    def geopandas_df2table(self, df, table_name,if_exists='append', id='True', check='False', clean='True' ):
+    def geopandas_df2table(self, df, table_name,if_exists='append'):
         engineurl='postgresql://%s:%s@%s:%s/%s'%(self.user,self.password,self.ip,self.port,self.database)
         db_engine=create_engine(engineurl)
         try:
-            if _judgecorrect(id):
-                df=self._makeid(df,table_name,head='True') #add title and id
-            if _judgecorrect(check):
-                df=_checksinglequote(df)
-            if _judgecorrect(clean):
-                df=_cleanspecialmark(df)
             df.to_postgis(name=table_name, con=db_engine, if_exists=if_exists)
         except:
             print('please input geopandas dataframe!!')
