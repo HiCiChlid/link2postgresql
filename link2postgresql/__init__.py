@@ -16,6 +16,7 @@ from link2postgresql.progressbar import ShowProcess
 import re
 import link2postgresql
 from urllib.request import quote
+import geopandas as gpd
 class Link2postgresql(object):
 
     def __init__(self, user="postgres", password="postgres", ip="localhost", port="5432",database="postgres", *args, **kwargs):
@@ -157,22 +158,28 @@ class Link2postgresql(object):
         results=self.fetch_execute(cmd)
         return results[0][0]
 
-    def table2pandas_df(self,table_name,cmd=""):# from postgis DB to local but no fileds just values
+    def table2pandas_df(self,table_name,cmd="",geo_scheme=""):# from postgis DB to local but no fileds just values
         # print('downloading data from table[%s]-->pandas dataframe'%table_name)
-        if cmd=="":
-            cmd='SELECT * FROM %s'%table_name
-        elif [True for i in ["select","Select","SELECT"] if i in cmd]:
-            #print("an sql command!")
-            cmd=cmd
-        elif [True for i in ["where","Where","WHERE"] if i in cmd]:
-            #print("a condition")
-            condition=cmd
-            cmd='SELECT * FROM %s %s'%(table_name,condition)
+        if geo_scheme=='':
+            if cmd=="":
+                cmd='SELECT * FROM %s'%table_name
+            elif [True for i in ["select","Select","SELECT"] if i in cmd]:
+                #print("an sql command!")
+                cmd=cmd
+            elif [True for i in ["where","Where","WHERE"] if i in cmd]:
+                #print("a condition")
+                condition=cmd
+                cmd='SELECT * FROM %s %s'%(table_name,condition)
+            else:
+                print("error")
+                return
+            results=self.fetch_execute(cmd,title=True)
+            return pd.DataFrame(results[0],columns=results[1])
         else:
-            print("error")
-            return
-        results=self.fetch_execute(cmd,title=True)
-        return pd.DataFrame(results[0],columns=results[1])
+            engineurl='postgresql://%s:%s@%s:%s/%s'%(self.user,self.password,self.ip,self.port,self.database)
+            db_engine=create_engine(engineurl)
+            output=gpd.read_postgis(cmd,con=db_engine,geom_col=geo_scheme)
+            return output
 
     def table2pandas_df_slow(self,table_name,cmd=""):
         spark_df=self.table2spark_df(table_name,cmd)
@@ -233,7 +240,19 @@ class Link2postgresql(object):
             print('no wkt')
             return
 
-        
+    def geopandas_df2table(self, df, table_name,if_exists='append', id='True', check='False', clean='True' ):
+        engineurl='postgresql://%s:%s@%s:%s/%s'%(self.user,self.password,self.ip,self.port,self.database)
+        db_engine=create_engine(engineurl)
+        try:
+            if _judgecorrect(id):
+                df=self._makeid(df,table_name,head='True') #add title and id
+            if _judgecorrect(check):
+                df=_checksinglequote(df)
+            if _judgecorrect(clean):
+                df=_cleanspecialmark(df)
+            df.to_postgis(name=table_name, con=db_engine, if_exists=if_exists)
+        except:
+            print('please input geopandas dataframe!!')
             
     def pandas_df2table(self, df, table_name, if_exists='append', id='True', check='False', clean='True',wkt_column="",geo_type="POINT"): # completely insert all data in pandas into table
         '''
