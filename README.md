@@ -28,6 +28,8 @@ pip install numpy
 pip install findspark
 pip install pyspark
 pip install pyarrow
+pip install geoalchemy2
+pip install geopandas
 ```
 
 ### Installing
